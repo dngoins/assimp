@@ -50,6 +50,7 @@ public:
 		devcon->IASetVertexBuffers(0, 1, &VertexBuffer, &stride, &offset);
 		devcon->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
+		if(textures.size() > 0)
 		devcon->PSSetShaderResources(0, 1, &textures[0].texture);
 
 		devcon->DrawIndexed(indices.size(), 0, 0);

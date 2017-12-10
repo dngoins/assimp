@@ -32,7 +32,7 @@ bool ModelLoader::Load(HWND hwnd, ID3D11Device * dev, ID3D11DeviceContext * devc
 
 void ModelLoader::Draw(ID3D11DeviceContext * devcon)
 {
-	for (int i = 0; i < meshes.size(); i++)
+	for (size_t i = 0; i < meshes.size(); i++)
 	{
 		meshes[i].Draw(devcon);
 	}
@@ -52,6 +52,7 @@ Mesh ModelLoader::processMesh(aiMesh * mesh, const aiScene * scene)
 		aiMaterial* mat = scene->mMaterials[mesh->mMaterialIndex];
 
 		if (textype.empty()) textype = determineTextureType(scene, mat);
+		//textype = determineTextureType(scene, mat);
 	}
 
 	// Walk through each of the mesh's vertices
@@ -180,6 +181,7 @@ string ModelLoader::determineTextureType(const aiScene * scene, aiMaterial * mat
 	{
 		return "textures are on disk";
 	}
+	return "";
 }
 
 int ModelLoader::getTextureIndex(aiString * str)

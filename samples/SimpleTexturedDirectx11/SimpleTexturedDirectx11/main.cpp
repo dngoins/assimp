@@ -485,7 +485,7 @@ void InitGraphics()
 	m_View = XMMatrixLookAtLH(Eye, At, Up);
 
 	ourModel = new ModelLoader;
-	if (!ourModel->Load(hwnd, dev, devcon, "Models/myModel.fbx"))
+	if (!ourModel->Load(hwnd, dev, devcon, "C:\\Users\\dngoi\\source\\repos\\github\\dngoins\\assimp\\bin\\code\\Debug\\Assets\\Bulldozer.3mf"))
 		Throwanerror("Model couldn't be loaded");
 }
 
