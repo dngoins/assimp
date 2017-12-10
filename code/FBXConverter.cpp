@@ -2,7 +2,8 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2017, assimp team
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -54,11 +55,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "StringComparison.h"
 
 #include <assimp/scene.h>
+
 #include <tuple>
 #include <memory>
-
 #include <iterator>
-#include <sstream>
 #include <vector>
 
 namespace Assimp {
@@ -436,6 +436,18 @@ private:
 
     aiScene* const out;
     const FBX::Document& doc;
+
+	bool FindTextureIndexByFilename(const Video& video, unsigned int& index) {
+		index = 0;
+		const char* videoFileName = video.FileName().c_str();
+		for (auto texture = textures_converted.begin(); texture != textures_converted.end(); ++texture) {
+			if (!strcmp(texture->first->FileName().c_str(), videoFileName)) {
+                index = texture->second;
+				return true;
+			}
+		}
+		return false;
+	}
 };
 
 Converter::Converter( aiScene* out, const Document& doc )
@@ -553,7 +565,6 @@ void Converter::ConvertNodes( uint64_t id, aiNode& parent, const aiMatrix4x4& pa
 
                 if ( !name_carrier ) {
                     nodes_chain.push_back( new aiNode( original_name ) );
-                    name_carrier = nodes_chain.back();
                 }
 
                 //setup metadata on newest node
@@ -631,7 +642,6 @@ void Converter::ConvertCameras( const Model& model )
         }
     }
 }
-
 
 void Converter::ConvertLight( const Model& model, const Light& light )
 {
@@ -769,7 +779,6 @@ const char* Converter::NameTransformationComp( TransformationComp comp )
     ai_assert( false );
     return NULL;
 }
-
 
 const char* Converter::NameTransformationCompProperty( TransformationComp comp )
 {
@@ -918,7 +927,7 @@ bool Converter::NeedsComplexTransformationChain( const Model& model )
         const TransformationComp comp = static_cast< TransformationComp >( i );
 
         if ( comp == TransformationComp_Rotation || comp == TransformationComp_Scaling || comp == TransformationComp_Translation ||
-            comp == TransformationComp_GeometricScaling || comp == TransformationComp_GeometricRotation || comp == TransformationComp_GeometricTranslation ) {
+                comp == TransformationComp_GeometricScaling || comp == TransformationComp_GeometricRotation || comp == TransformationComp_GeometricTranslation ) {
             continue;
         }
 
@@ -936,8 +945,7 @@ std::string Converter::NameTransformationChainNode( const std::string& name, Tra
     return name + std::string( MAGIC_NODE_TAG ) + "_" + NameTransformationComp( comp );
 }
 
-void Converter::GenerateTransformationNodeChain( const Model& model,
-    std::vector<aiNode*>& output_nodes )
+void Converter::GenerateTransformationNodeChain( const Model& model, std::vector<aiNode*>& output_nodes )
 {
     const PropertyTable& props = model.Props();
     const Model::RotOrder rot = model.RotationOrder();
@@ -1052,6 +1060,10 @@ void Converter::GenerateTransformationNodeChain( const Model& model,
                 continue;
             }
 
+            if ( comp == TransformationComp_PostRotation  ) {
+                chain[ i ] = chain[ i ].Inverse();
+            }
+
             aiNode* nd = new aiNode();
             output_nodes.push_back( nd );
 
@@ -1080,7 +1092,7 @@ void Converter::SetupNodeMetadata( const Model& model, aiNode& nd )
     DirectPropertyMap unparsedProperties = props.GetUnparsedProperties();
 
     // create metadata on node
-    std::size_t numStaticMetaData = 2;
+    const std::size_t numStaticMetaData = 2;
     aiMetadata* data = aiMetadata::Alloc( static_cast<unsigned int>(unparsedProperties.size() + numStaticMetaData) );
     nd.mMetaData = data;
     int index = 0;
@@ -1749,7 +1761,7 @@ unsigned int Converter::ConvertVideo( const Video& video )
     out_tex->mWidth = static_cast<unsigned int>( video.ContentLength() ); // total data size
     out_tex->mHeight = 0; // fixed to 0
 
-                            // steal the data from the Video to avoid an additional copy
+    // steal the data from the Video to avoid an additional copy
     out_tex->pcData = reinterpret_cast<aiTexel*>( const_cast<Video&>( video ).RelinquishContent() );
 
     // try to extract a hint from the file extension
@@ -1783,22 +1795,32 @@ void Converter::TrySetTextureProperties( aiMaterial* out_mat, const TextureMap& 
         path.Set( tex->RelativeFilename() );
 
         const Video* media = tex->Media();
-        if ( media != 0 && media->ContentLength() > 0 ) {
-            unsigned int index;
+        if (media != 0) {
+			bool textureReady = false; //tells if our texture is ready (if it was loaded or if it was found)
+			unsigned int index;
 
-            VideoMap::const_iterator it = textures_converted.find( media );
-            if ( it != textures_converted.end() ) {
-                index = ( *it ).second;
-            }
-            else {
-                index = ConvertVideo( *media );
-                textures_converted[ media ] = index;
-            }
+			VideoMap::const_iterator it = textures_converted.find(media);
+			if (it != textures_converted.end()) {
+				index = (*it).second;
+				textureReady = true;
+			}
+			else {
+				if (media->ContentLength() > 0) {
+					index = ConvertVideo(*media);
+					textures_converted[media] = index;
+					textureReady = true;
+				}
+				else if (doc.Settings().searchEmbeddedTextures) { //try to find the texture on the already-loaded textures by the filename, if the flag is on					
+					textureReady = FindTextureIndexByFilename(*media, index);
+				}
+			}
 
-            // setup texture reference string (copied from ColladaLoader::FindFilenameForEffectTexture)
-            path.data[ 0 ] = '*';
-            path.length = 1 + ASSIMP_itoa10( path.data + 1, MAXLEN - 1, index );
-        }
+			// setup texture reference string (copied from ColladaLoader::FindFilenameForEffectTexture), if the texture is ready
+			if (textureReady) {
+				path.data[0] = '*';
+				path.length = 1 + ASSIMP_itoa10(path.data + 1, MAXLEN - 1, index);
+			}
+		}  
 
         out_mat->AddProperty( &path, _AI_MATKEY_TEXTURE_BASE, target, 0 );
 
@@ -2213,9 +2235,17 @@ void Converter::ConvertAnimations()
     }
 }
 
+void Converter::RenameNode( const std::string& fixed_name, const std::string& new_name ) {
+    if ( node_names.find( fixed_name ) == node_names.end() ) {
+        FBXImporter::LogError( "Cannot rename node " + fixed_name + ", not existing.");
+        return;
+    }
 
-void Converter::RenameNode( const std::string& fixed_name, const std::string& new_name )
-{
+    if ( node_names.find( new_name ) != node_names.end() ) {
+        FBXImporter::LogError( "Cannot rename node " + fixed_name + " to " + new_name +", name already existing." );
+        return;
+    }
+
     ai_assert( node_names.find( fixed_name ) != node_names.end() );
     ai_assert( node_names.find( new_name ) == node_names.end() );
 
@@ -2345,8 +2375,13 @@ void Converter::ConvertAnimationStack( const AnimationStack& st )
 
     int64_t start_time = st.LocalStart();
     int64_t stop_time = st.LocalStop();
-    double start_timeF = CONVERT_FBX_TIME( start_time );
-    double stop_timeF = CONVERT_FBX_TIME( stop_time );
+    bool has_local_startstop = start_time != 0 || stop_time != 0;
+    if ( !has_local_startstop ) {
+        // no time range given, so accept every keyframe and use the actual min/max time
+        // the numbers are INT64_MIN/MAX, the 20000 is for safety because GenerateNodeAnimations uses an epsilon of 10000
+        start_time = -9223372036854775807ll + 20000;
+        stop_time = 9223372036854775807ll - 20000;
+    }
 
     try {
         for( const NodeMap::value_type& kv : node_map ) {
@@ -2378,30 +2413,27 @@ void Converter::ConvertAnimationStack( const AnimationStack& st )
         return;
     }
 
-    //adjust relative timing for animation
-    {
-        double start_fps = start_timeF * anim_fps;
+    double start_time_fps = has_local_startstop ? (CONVERT_FBX_TIME(start_time) * anim_fps) : min_time;
+    double stop_time_fps = has_local_startstop ? (CONVERT_FBX_TIME(stop_time) * anim_fps) : max_time;
 
-        for ( unsigned int c = 0; c < anim->mNumChannels; c++ )
-        {
-            aiNodeAnim* channel = anim->mChannels[ c ];
-            for ( uint32_t i = 0; i < channel->mNumPositionKeys; i++ )
-                channel->mPositionKeys[ i ].mTime -= start_fps;
-            for ( uint32_t i = 0; i < channel->mNumRotationKeys; i++ )
-                channel->mRotationKeys[ i ].mTime -= start_fps;
-            for ( uint32_t i = 0; i < channel->mNumScalingKeys; i++ )
-                channel->mScalingKeys[ i ].mTime -= start_fps;
-        }
-
-        max_time -= min_time;
+    // adjust relative timing for animation
+    for ( unsigned int c = 0; c < anim->mNumChannels; c++ ) {
+        aiNodeAnim* channel = anim->mChannels[ c ];
+        for ( uint32_t i = 0; i < channel->mNumPositionKeys; i++ )
+            channel->mPositionKeys[ i ].mTime -= start_time_fps;
+        for ( uint32_t i = 0; i < channel->mNumRotationKeys; i++ )
+            channel->mRotationKeys[ i ].mTime -= start_time_fps;
+        for ( uint32_t i = 0; i < channel->mNumScalingKeys; i++ )
+            channel->mScalingKeys[ i ].mTime -= start_time_fps;
     }
 
     // for some mysterious reason, mDuration is simply the maximum key -- the
     // validator always assumes animations to start at zero.
-    anim->mDuration = ( stop_timeF - start_timeF ) * anim_fps;
+    anim->mDuration = stop_time_fps - start_time_fps;
     anim->mTicksPerSecond = anim_fps;
 }
 
+#ifdef ASSIMP_BUILD_DEBUG
 // ------------------------------------------------------------------------------------------------
 // sanity check whether the input is ok
 static void validateAnimCurveNodes( const std::vector<const AnimationCurveNode*>& curves,
@@ -2419,6 +2451,7 @@ static void validateAnimCurveNodes( const std::vector<const AnimationCurveNode*>
         }
     }
 }
+#endif // ASSIMP_BUILD_DEBUG
 
 // ------------------------------------------------------------------------------------------------
 void Converter::GenerateNodeAnimations( std::vector<aiNodeAnim*>& node_anims,
@@ -2710,10 +2743,10 @@ aiNodeAnim* Converter::GenerateRotationNodeAnim( const std::string& name,
     double& max_time,
     double& min_time )
 {
-    ScopeGuard<aiNodeAnim> na( new aiNodeAnim() );
+    std::unique_ptr<aiNodeAnim> na( new aiNodeAnim() );
     na->mNodeName.Set( name );
 
-    ConvertRotationKeys( na, curves, layer_map, start, stop, max_time, min_time, target.RotationOrder() );
+    ConvertRotationKeys( na.get(), curves, layer_map, start, stop, max_time, min_time, target.RotationOrder() );
 
     // dummy scaling key
     na->mScalingKeys = new aiVectorKey[ 1 ];
@@ -2729,7 +2762,7 @@ aiNodeAnim* Converter::GenerateRotationNodeAnim( const std::string& name,
     na->mPositionKeys[ 0 ].mTime = 0.;
     na->mPositionKeys[ 0 ].mValue = aiVector3D();
 
-    return na.dismiss();
+    return na.release();
 }
 
 aiNodeAnim* Converter::GenerateScalingNodeAnim( const std::string& name,
@@ -2740,10 +2773,10 @@ aiNodeAnim* Converter::GenerateScalingNodeAnim( const std::string& name,
     double& max_time,
     double& min_time )
 {
-    ScopeGuard<aiNodeAnim> na( new aiNodeAnim() );
+    std::unique_ptr<aiNodeAnim> na( new aiNodeAnim() );
     na->mNodeName.Set( name );
 
-    ConvertScaleKeys( na, curves, layer_map, start, stop, max_time, min_time );
+    ConvertScaleKeys( na.get(), curves, layer_map, start, stop, max_time, min_time );
 
     // dummy rotation key
     na->mRotationKeys = new aiQuatKey[ 1 ];
@@ -2759,7 +2792,7 @@ aiNodeAnim* Converter::GenerateScalingNodeAnim( const std::string& name,
     na->mPositionKeys[ 0 ].mTime = 0.;
     na->mPositionKeys[ 0 ].mValue = aiVector3D();
 
-    return na.dismiss();
+    return na.release();
 }
 
 
@@ -2772,10 +2805,10 @@ aiNodeAnim* Converter::GenerateTranslationNodeAnim( const std::string& name,
     double& min_time,
     bool inverse )
 {
-    ScopeGuard<aiNodeAnim> na( new aiNodeAnim() );
+    std::unique_ptr<aiNodeAnim> na( new aiNodeAnim() );
     na->mNodeName.Set( name );
 
-    ConvertTranslationKeys( na, curves, layer_map, start, stop, max_time, min_time );
+    ConvertTranslationKeys( na.get(), curves, layer_map, start, stop, max_time, min_time );
 
     if ( inverse ) {
         for ( unsigned int i = 0; i < na->mNumPositionKeys; ++i ) {
@@ -2797,7 +2830,7 @@ aiNodeAnim* Converter::GenerateTranslationNodeAnim( const std::string& name,
     na->mRotationKeys[ 0 ].mTime = 0.;
     na->mRotationKeys[ 0 ].mValue = aiQuaternion();
 
-    return na.dismiss();
+    return na.release();
 }
 
 aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
@@ -2811,7 +2844,7 @@ aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
     bool reverse_order )
 
 {
-    ScopeGuard<aiNodeAnim> na( new aiNodeAnim() );
+    std::unique_ptr<aiNodeAnim> na( new aiNodeAnim() );
     na->mNodeName.Set( name );
 
     const PropertyTable& props = target.Props();
@@ -2883,7 +2916,7 @@ aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
         // which requires all of rotation, scaling and translation
         // to be set.
         if ( chain[ TransformationComp_Scaling ] != iter_end ) {
-            ConvertScaleKeys( na, ( *chain[ TransformationComp_Scaling ] ).second,
+            ConvertScaleKeys( na.get(), ( *chain[ TransformationComp_Scaling ] ).second,
                 layer_map,
                 start, stop,
                 max_time,
@@ -2899,7 +2932,7 @@ aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
         }
 
         if ( chain[ TransformationComp_Rotation ] != iter_end ) {
-            ConvertRotationKeys( na, ( *chain[ TransformationComp_Rotation ] ).second,
+            ConvertRotationKeys( na.get(), ( *chain[ TransformationComp_Rotation ] ).second,
                 layer_map,
                 start, stop,
                 max_time,
@@ -2917,7 +2950,7 @@ aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
         }
 
         if ( chain[ TransformationComp_Translation ] != iter_end ) {
-            ConvertTranslationKeys( na, ( *chain[ TransformationComp_Translation ] ).second,
+            ConvertTranslationKeys( na.get(), ( *chain[ TransformationComp_Translation ] ).second,
                 layer_map,
                 start, stop,
                 max_time,
@@ -2933,7 +2966,7 @@ aiNodeAnim* Converter::GenerateSimpleNodeAnim( const std::string& name,
         }
 
     }
-    return na.dismiss();
+    return na.release();
 }
 
 Converter::KeyFrameListList Converter::GetKeyframeList( const std::vector<const AnimationCurveNode*>& nodes, int64_t start, int64_t stop )
@@ -3096,7 +3129,6 @@ void Converter::InterpolateKeys( aiVectorKey* valOut, const KeyTimeList& keys, c
     }
 }
 
-
 void Converter::InterpolateKeys( aiQuatKey* valOut, const KeyTimeList& keys, const KeyFrameListList& inputs,
     const aiVector3D& def_value,
     double& maxTime,
@@ -3117,7 +3149,6 @@ void Converter::InterpolateKeys( aiQuatKey* valOut, const KeyTimeList& keys, con
 
         valOut[ i ].mTime = temp[ i ].mTime;
 
-
         GetRotationMatrix( order, temp[ i ].mValue, m );
         aiQuaternion quat = aiQuaternion( aiMatrix3x3( m ) );
 
@@ -3135,7 +3166,6 @@ void Converter::InterpolateKeys( aiQuatKey* valOut, const KeyTimeList& keys, con
         valOut[ i ].mValue = quat;
     }
 }
-
 
 void Converter::ConvertTransformOrder_TRStoSRT( aiQuatKey* out_quat, aiVectorKey* out_scale,
     aiVectorKey* out_translation,
@@ -3195,7 +3225,6 @@ void Converter::ConvertTransformOrder_TRStoSRT( aiQuatKey* out_quat, aiVectorKey
     }
 }
 
-
 aiQuaternion Converter::EulerToQuaternion( const aiVector3D& rot, Model::RotOrder order )
 {
     aiMatrix4x4 m;
@@ -3203,7 +3232,6 @@ aiQuaternion Converter::EulerToQuaternion( const aiVector3D& rot, Model::RotOrde
 
     return aiQuaternion( aiMatrix3x3( m ) );
 }
-
 
 void Converter::ConvertScaleKeys( aiNodeAnim* na, const std::vector<const AnimationCurveNode*>& nodes, const LayerMap& /*layers*/,
     int64_t start, int64_t stop,
@@ -3225,7 +3253,6 @@ void Converter::ConvertScaleKeys( aiNodeAnim* na, const std::vector<const Animat
         InterpolateKeys( na->mScalingKeys, keys, inputs, aiVector3D( 1.0f, 1.0f, 1.0f ), maxTime, minTime );
 }
 
-
 void Converter::ConvertTranslationKeys( aiNodeAnim* na, const std::vector<const AnimationCurveNode*>& nodes,
     const LayerMap& /*layers*/,
     int64_t start, int64_t stop,
@@ -3243,7 +3270,6 @@ void Converter::ConvertTranslationKeys( aiNodeAnim* na, const std::vector<const 
     if ( keys.size() > 0 )
         InterpolateKeys( na->mPositionKeys, keys, inputs, aiVector3D( 0.0f, 0.0f, 0.0f ), maxTime, minTime );
 }
-
 
 void Converter::ConvertRotationKeys( aiNodeAnim* na, const std::vector<const AnimationCurveNode*>& nodes,
     const LayerMap& /*layers*/,
@@ -3266,7 +3292,8 @@ void Converter::ConvertRotationKeys( aiNodeAnim* na, const std::vector<const Ani
 
 void Converter::TransferDataToScene()
 {
-    ai_assert( !out->mMeshes && !out->mNumMeshes );
+    ai_assert( !out->mMeshes );
+    ai_assert( !out->mNumMeshes );
 
     // note: the trailing () ensures initialization with NULL - not
     // many C++ users seem to know this, so pointing it out to avoid

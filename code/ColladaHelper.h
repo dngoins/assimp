@@ -4,7 +4,8 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2017, assimp team
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -43,7 +44,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef AI_COLLADAHELPER_H_INC
 #define AI_COLLADAHELPER_H_INC
 
-#include <string>
 #include <map>
 #include <vector>
 #include <stdint.h>
@@ -302,7 +302,7 @@ struct Accessor
     size_t mOffset;  // in number of values
     size_t mStride;  // Stride in number of values
     std::vector<std::string> mParams; // names of the data streams in the accessors. Empty string tells to ignore.
-    size_t mSubOffset[4]; // Suboffset inside the object for the common 4 elements. For a vector, thats XYZ, for a color RGBA and so on.
+    size_t mSubOffset[4]; // Suboffset inside the object for the common 4 elements. For a vector, that's XYZ, for a color RGBA and so on.
                           // For example, SubOffset[0] denotes which of the values inside the object is the vector X component.
     std::string mSource;   // URL of the source array
     mutable const Data* mData; // Pointer to the source array, if resolved. NULL else
