@@ -4,6 +4,9 @@
  */
 
 /* @(#) $Id$ */
+#include "pch.h"
+//#include "uwp_zlib.h"
+
 
 #define ZLIB_INTERNAL
 #include "zlib.h"

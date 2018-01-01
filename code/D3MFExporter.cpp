@@ -55,6 +55,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <contrib/zip/src/zip.h>
 
+
+//REMOVED ZIP calls for UWP
+
 namespace Assimp {
 
 void ExportScene3MF( const char* pFile, IOSystem* pIOSystem, const aiScene* pScene, const ExportProperties* /*pProperties*/ ) {
@@ -108,10 +111,11 @@ bool D3MFExporter::validate() {
     return true;
 }
 
+
 bool D3MFExporter::exportArchive( const char *file ) {
     bool ok( true );
 
-    m_zipArchive = zip_open( file, ZIP_DEFAULT_COMPRESSION_LEVEL, 'w' );
+//    m_zipArchive = zip_open( file, ZIP_DEFAULT_COMPRESSION_LEVEL, 'w' );
     if ( nullptr == m_zipArchive ) {
         return false;
     }
@@ -119,7 +123,7 @@ bool D3MFExporter::exportArchive( const char *file ) {
     ok |= export3DModel();
     ok |= exportRelations();
 
-    zip_close( m_zipArchive );
+    //zip_close( m_zipArchive );
     m_zipArchive = nullptr;
 
     return ok;
@@ -286,12 +290,12 @@ void D3MFExporter::exportContentTyp( const std::string &filename ) {
         throw DeadlyExportError( "3MF-Export: Zip archive not valid, nullptr." );
     }
     const std::string entry = filename;
-    zip_entry_open( m_zipArchive, entry.c_str() );
+    //zip_entry_open( m_zipArchive, entry.c_str() );
 
     const std::string &exportTxt( mContentOutput.str() );
-    zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
+    //zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
 
-    zip_entry_close( m_zipArchive );
+    //zip_entry_close( m_zipArchive );
 }
 
 void D3MFExporter::writeModelToArchive( const std::string &folder, const std::string &modelName ) {
@@ -299,12 +303,12 @@ void D3MFExporter::writeModelToArchive( const std::string &folder, const std::st
         throw DeadlyExportError( "3MF-Export: Zip archive not valid, nullptr." );
     }
     const std::string entry = folder + "/" + modelName;
-    zip_entry_open( m_zipArchive, entry.c_str() );
+    //zip_entry_open( m_zipArchive, entry.c_str() );
 
     const std::string &exportTxt( mModelOutput.str() );
-    zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
+    //zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
 
-    zip_entry_close( m_zipArchive );
+    //zip_entry_close( m_zipArchive );
 }
 
 void D3MFExporter::writeRelInfoToFile( const std::string &folder, const std::string &relName ) {
@@ -312,12 +316,12 @@ void D3MFExporter::writeRelInfoToFile( const std::string &folder, const std::str
         throw DeadlyExportError( "3MF-Export: Zip archive not valid, nullptr." );
     }
     const std::string entry = folder + "/" + relName;
-    zip_entry_open( m_zipArchive, entry.c_str() );
+    //zip_entry_open( m_zipArchive, entry.c_str() );
 
     const std::string &exportTxt( mRelOutput.str() );
-    zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
+    //zip_entry_write( m_zipArchive, exportTxt.c_str(), exportTxt.size() );
 
-    zip_entry_close( m_zipArchive );
+    //zip_entry_close( m_zipArchive );
 }
 
 

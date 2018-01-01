@@ -48,6 +48,8 @@
  */
 
 /* @(#) $Id$ */
+#include "pch.h"
+//#include "uwp_zlib.h"
 
 #include "deflate.h"
 

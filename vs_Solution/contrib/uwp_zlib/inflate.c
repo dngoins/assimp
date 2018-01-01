@@ -79,6 +79,9 @@
  *
  * The history for versions after 1.2.0 are in ChangeLog in zlib distribution.
  */
+#include "pch.h"
+ //#include "uwp_zlib.h"
+
 
 #include "zutil.h"
 #include "inftrees.h"

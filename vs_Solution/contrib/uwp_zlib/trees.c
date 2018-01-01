@@ -33,6 +33,9 @@
 /* @(#) $Id$ */
 
 /* #define GEN_TREES_H */
+#include "pch.h"
+//#include "uwp_zlib.h"
+
 
 #include "deflate.h"
 
